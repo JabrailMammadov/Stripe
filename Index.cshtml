@@ -1,0 +1,79 @@
+@{
+  ViewBag.Title = "Payment Page";
+}
+<form>
+  <label>Card<div id="card-element" style="min-width: 250px !important"></div></label>
+  <div id="card-errors" class="text-danger" role="alert"></div>
+  <a class="btn btn-primary" id="PayIntentStripe">Stripe PaymentIntent</a>
+</form>
+
+@section scripts{
+  <script>
+    var stripe = Stripe('pk_test_TYooMQauvdEDq54NiTphI7jx');
+    var elements = stripe.elements();
+    var cardElement = elements.create('card', { hidePostalCode: true});
+    cardElement.mount('#card-element');
+    cardElement.focus();
+    var errorElement = document.getElementById('card-errors');
+    $("#PayIntentStripe").off();
+    $("#PayIntentStripe").attr("disabled", "disabled");
+    cardElement.on("change", function (event) {
+      if (event.complete) {
+        $("#PayIntentStripe").removeAttr("disabled");
+      }
+      else {
+        $("#PayIntentStripe").attr("disabled", "disabled");
+      }
+    });
+    cardElement.on('ready', function () {
+      $("#PayIntentStripe").on("click", function (e) {
+        $.ajax({
+          url: "/Payment/Stripe?order_id=1",
+          type: "POST",
+          success: function (data) {
+            console.log(data);
+            stripe.confirmCardPayment(data.response.ClientSecret, {
+              payment_method: {
+                card: cardElement,
+                //return_url: 'https://example.com/return_url',
+                billing_details: {
+                  name: 'Jenny Rosen',
+                },
+              },
+            }, {
+              handleActions: true
+            }).then(function (result) {
+              console.log(result);
+              if (result.error) {
+                errorElement.textContent = result.error.message;
+              } else if (result.paymentIntent && result.paymentIntent.status === 'succeeded') {
+                // Send the paymentIntent to your server.
+                // Get charge data
+                $.ajax({
+                  url: encodeURI("/Payment/Stripe?order_id=1&pi_id=" + result.paymentIntent.id),
+                  type: "POST",
+                  success: function (captureData) {
+                    console.log(captureData);
+                    cardElement.unmount();
+                    var p = window.open(
+                      captureData.response[0].ReceiptUrl, "",
+                      `left=50,top=50,width=${window.innerWidth - 100},height=${window.innerHeight - 50}`);
+                    window.location = "/";
+                  },
+                  error: function (error) {
+                    console.log(error);
+                    errorElement.textContent = error.responseJSON.message;
+                  }
+                });
+              }
+            });
+          },
+          error: function (error) {
+            console.log(error);
+            errorElement.textContent = error.responseJSON.message;
+          }
+        })
+      });
+    });
+  </script>  
+}
